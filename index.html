@@ -651,7 +651,7 @@ async function callAI(prompt) {
     throw new Error('Missing API Key');
   }
 
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
   const payload = {
     systemInstruction: {
       parts: [{ text: 'You are a JSON-only scheduling engine. You output a single valid JSON object and nothing else. No markdown formatting, no code blocks, no prose. Your entire response must be strictly parseable by JSON.parse().' }]
