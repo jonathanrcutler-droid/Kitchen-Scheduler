@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kitchen Scheduler — FS & SPF</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap');
+:root {
+  --coal:#1a1612; --ember:#c94f1e; --ember-dim:#7a2f10;
+  --cream:#f5f0e8; --parchment:#ede6d6; --ash:#8a8078;
+  --smoke:#3a342e; --steel:#2e2a26; --highlight:#f0a04b;
+  --safe-green:#2e7d4f; --danger-red:#b83030;
+  --spf:#2a4a7a; --spf-light:#4a8adf;
+  --timeoff-flag:#f0e040; --timeoff-bg:rgba(240,224,64,0.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--coal);color:var(--cream);font-family:'Inter',sans-serif;min-height:100vh}
+
+header{border-bottom:2px solid var(--ember);padding:1.1rem 2rem;display:flex;align-items:center;gap:1.1rem;background:var(--steel)}
+.flame-icon{font-size:1.7rem}
+header h1{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:900;color:var(--cream)}
+header h1 span{color:var(--ember)}
+header p{font-size:.7rem;color:var(--ash);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em}
+
+.main-wrap{display:grid;grid-template-columns:370px 1fr;min-height:calc(100vh - 68px)}
+
+/* SIDEBAR */
+.sidebar{background:var(--smoke);border-right:1px solid #3a342e;padding:1.1rem;overflow-y:auto;max-height:calc(100vh - 68px)}
+.sidebar-section{margin-bottom:1.5rem}
+.sidebar-section h2{font-family:'DM Mono',monospace;font-size:.64rem;text-transform:uppercase;letter-spacing:.15em;color:var(--ember);margin-bottom:.65rem;padding-bottom:.32rem;border-bottom:1px solid var(--ember-dim)}
+label{display:block;font-size:.73rem;color:var(--ash);margin-bottom:.18rem;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.07em}
+input[type="text"],textarea,select{width:100%;background:var(--coal);border:1px solid #4a4038;color:var(--cream);padding:.45rem .65rem;border-radius:4px;font-size:.83rem;font-family:'Inter',sans-serif;margin-bottom:.6rem;outline:none;transition:border-color .2s}
+input[type="text"]:focus,textarea:focus,select:focus{border-color:var(--ember)}
+textarea{resize:vertical;min-height:48px}
+
+/* Staff cards */
+.staff-list{display:flex;flex-direction:column;gap:.45rem;margin-bottom:.65rem}
+.staff-card{background:var(--coal);border:1px solid #3a342e;border-radius:6px;padding:.55rem .8rem;position:relative}
+.staff-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.25rem;gap:.35rem;flex-wrap:wrap}
+.staff-name{font-weight:600;font-size:.85rem;color:var(--cream)}
+.badges{display:flex;flex-wrap:wrap;gap:.2rem}
+.badge{font-size:.58rem;padding:.1rem .35rem;border-radius:20px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.badge-minor{background:#7a2f10;color:#ffcba0}
+.badge-adult{background:#1e4a2e;color:#88e0aa}
+.badge-loc{background:var(--spf);color:#aad4ff}
+.badge-timeoff{background:#5a4a00;color:var(--timeoff-flag);animation:pulse-badge 1.5s ease-in-out infinite}
+@keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.6}}
+.staff-meta{font-size:.7rem;color:var(--ash);margin-top:.12rem;line-height:1.55}
+.staff-meta span{color:var(--highlight)}
+.staff-actions{display:flex;gap:.3rem;margin-top:.4rem;flex-wrap:wrap}
+.action-btn{background:var(--smoke);border:1px solid #4a4038;color:var(--ash);padding:.18rem .5rem;border-radius:4px;font-size:.67rem;cursor:pointer;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;transition:all .2s;white-space:nowrap}
+.action-btn:hover{border-color:var(--ember);color:var(--ember)}
+.action-btn.danger:hover{border-color:var(--danger-red);color:var(--danger-red)}
+.action-btn.active-flag{border-color:var(--timeoff-flag);color:var(--timeoff-flag)}
+
+/* Add staff form */
+.add-staff-form{background:var(--coal);border:1px dashed #4a4038;border-radius:6px;padding:.8rem}
+.add-staff-form h3{font-size:.67rem;color:var(--ash);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.6rem}
+
+/* Chips */
+.checkbox-group{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.6rem}
+.check-chip{display:flex;align-items:center;gap:.22rem;background:var(--smoke);border:1px solid #4a4038;border-radius:20px;padding:.18rem .5rem;font-size:.7rem;cursor:pointer;transition:border-color .2s,background .2s;user-select:none}
+.check-chip input{display:none}
+.check-chip.checked{background:var(--ember-dim);border-color:var(--ember);color:#ffd0b0}
+.check-chip.checked-avail{background:#1e3a28;border-color:var(--safe-green);color:#88e0aa}
+.check-chip.checked-loc{background:var(--spf);border-color:var(--spf-light);color:#cce8ff}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .95rem;border-radius:4px;border:none;cursor:pointer;font-size:.8rem;font-weight:600;transition:opacity .2s,transform .1s}
+.btn:active{transform:scale(.98)}
+.btn-ember{background:var(--ember);color:#fff}
+.btn-ember:hover{opacity:.9}
+.btn-outline{background:transparent;border:1px solid var(--ember);color:var(--ember)}
+.btn-outline:hover{background:var(--ember-dim)}
+.btn-sm{padding:.28rem .65rem;font-size:.72rem}
+.btn-full{width:100%;justify-content:center}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* MAIN */
+.main-area{padding:1.4rem 1.6rem;overflow-y:auto;max-height:calc(100vh - 68px)}
+.generate-bar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.7rem}
+.generate-bar h2{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:700}
+.legend{display:flex;gap:.9rem;flex-wrap:wrap;margin-top:.3rem;font-size:.68rem;color:var(--ash)}
+.legend-item{display:flex;align-items:center;gap:.3rem}
+.legend-dot{width:8px;height:8px;border-radius:2px}
+.dot-opener{background:var(--highlight)} .dot-mid{background:#88e0aa} .dot-closer{background:var(--ember)}
+.dot-timeoff{background:var(--timeoff-flag)}
+
+.loc-tabs{display:flex;gap:.35rem;margin-bottom:.7rem}
+.loc-tab{padding:.3rem 1rem;border-radius:4px;border:none;cursor:pointer;font-size:.75rem;font-weight:600;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;transition:all .2s}
+.loc-tab.fs{background:var(--ember-dim);color:#ffd0b0;border:1px solid var(--ember)}
+.loc-tab.fs.active{background:var(--ember);color:#fff}
+.loc-tab.spf{background:var(--spf);color:#aad4ff;border:1px solid var(--spf-light)}
+.loc-tab.spf.active{background:var(--spf-light);color:#fff}
+
+.week-tabs{display:flex;gap:.35rem;margin-bottom:.9rem;flex-wrap:wrap}
+.week-tab{background:var(--smoke);border:1px solid #3a342e;color:var(--ash);padding:.3rem .85rem;border-radius:4px;cursor:pointer;font-size:.72rem;font-family:'DM Mono',monospace;transition:all .2s}
+.week-tab.active{background:var(--ember-dim);border-color:var(--ember);color:var(--cream)}
+
+/* Schedule table */
+.schedule-wrap{overflow-x:auto}
+.schedule-table{width:100%;border-collapse:collapse;font-size:.75rem;min-width:580px}
+.schedule-table th{background:var(--steel);padding:.45rem .65rem;text-align:left;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.07em;font-size:.6rem;color:var(--ash);border-bottom:2px solid var(--ember)}
+.schedule-table th.day-col{color:var(--ember)}
+.schedule-table td{padding:.4rem .65rem;border-bottom:1px solid #2e2a26;vertical-align:top}
+.schedule-table tr:hover td{background:rgba(201,79,30,.04)}
+.schedule-table tr.timeoff-row td{background:var(--timeoff-bg) !important;border-left:2px solid var(--timeoff-flag)}
+.day-label{font-weight:600;font-size:.8rem;color:var(--cream);white-space:nowrap}
+.date-sub{font-size:.64rem;color:var(--ash);font-family:'DM Mono',monospace}
+.shift-label{font-size:.58rem;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-top:.22rem}
+.shift-label.opener{color:var(--highlight)} .shift-label.mid{color:#88e0aa} .shift-label.closer{color:var(--ember)}
+.shift-slot{display:inline-block;background:var(--smoke);border-radius:4px;padding:.15rem .4rem;margin:.1rem 0;font-size:.72rem;color:var(--cream);white-space:nowrap}
+.shift-slot.opener{border-left:3px solid var(--highlight)}
+.shift-slot.mid{border-left:3px solid #88e0aa}
+.shift-slot.closer{border-left:3px solid var(--ember)}
+.shift-slot.timeoff-conflict{border-left:3px solid var(--timeoff-flag);background:rgba(240,224,64,.12);color:var(--timeoff-flag)}
+.shift-minor-flag{font-size:.58rem;color:#ffcba0;background:var(--ember-dim);padding:.04rem .22rem;border-radius:10px;margin-left:.22rem}
+.timeoff-marker{font-size:.62rem;color:var(--timeoff-flag);font-family:'DM Mono',monospace;display:block;margin-top:.15rem}
+.day-divider td{padding:0;border-bottom:2px solid var(--smoke)}
+
+/* Hours summary */
+.hours-section{margin-top:1.4rem}
+.hours-section h2{font-family:'DM Mono',monospace;font-size:.64rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ember);margin-bottom:.6rem}
+.hours-table-wrap{overflow-x:auto}
+.hours-table{width:100%;border-collapse:collapse;font-size:.75rem}
+.hours-table th{background:var(--steel);padding:.4rem .7rem;text-align:left;font-family:'DM Mono',monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ash);border-bottom:1px solid var(--ember)}
+.hours-table td{padding:.38rem .7rem;border-bottom:1px solid #2e2a26}
+.hours-table tr:hover td{background:rgba(201,79,30,.04)}
+.hours-name{font-weight:600;color:var(--cream)}
+.hours-total{font-weight:700;color:var(--highlight)}
+.hours-bar-wrap{width:90px;background:#2e2a26;border-radius:20px;height:6px;display:inline-block;vertical-align:middle;margin-left:.4rem}
+.hours-bar{height:6px;border-radius:20px;background:var(--ember);transition:width .4s}
+.hours-bar.balanced{background:var(--safe-green)}
+.hours-bar.over{background:var(--danger-red)}
+
+/* Empty / loading */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:220px;text-align:center;color:var(--ash);gap:.6rem}
+.empty-state .big-icon{font-size:2.2rem;opacity:.4}
+.empty-state p{font-size:.82rem;max-width:290px;line-height:1.6}
+.loading-spinner{display:inline-block;width:.95rem;height:.95rem;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.notes-section{margin-top:1rem}
+.ai-notes{background:var(--smoke);border:1px solid #4a4038;border-left:3px solid var(--highlight);border-radius:4px;padding:.8rem .95rem;font-size:.78rem;line-height:1.7;color:var(--parchment);white-space:pre-wrap}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--steel);border:1px solid var(--ember);border-radius:8px;padding:1.4rem;width:min(480px,95vw);max-height:85vh;overflow-y:auto;position:relative}
+.modal h3{font-family:'Playfair Display',serif;font-size:1.1rem;margin-bottom:1rem;color:var(--cream)}
+.modal-close{position:absolute;top:.7rem;right:.9rem;background:none;border:none;color:var(--ash);font-size:1.2rem;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--cream)}
+.modal-section{margin-bottom:1.1rem}
+.modal-section h4{font-family:'DM Mono',monospace;font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ember);margin-bottom:.55rem;padding-bottom:.28rem;border-bottom:1px solid var(--ember-dim)}
+
+/* Availability grid */
+.avail-grid{display:flex;flex-direction:column;gap:.4rem}
+.avail-row{display:flex;align-items:center;gap:.5rem}
+.avail-day-label{font-size:.72rem;font-family:'DM Mono',monospace;color:var(--ash);width:32px;flex-shrink:0;text-transform:uppercase}
+.avail-shifts{display:flex;gap:.3rem}
+.shift-chip{background:var(--smoke);border:1px solid #4a4038;border-radius:20px;padding:.16rem .48rem;font-size:.67rem;cursor:pointer;transition:all .2s;user-select:none;font-family:'DM Mono',monospace}
+.shift-chip.avail-opener.on{background:#4a3800;border-color:var(--highlight);color:var(--highlight)}
+.shift-chip.avail-mid.on{background:#1e3a28;border-color:#88e0aa;color:#88e0aa}
+.shift-chip.avail-closer.on{background:var(--ember-dim);border-color:var(--ember);color:#ffd0b0}
+.avail-off-label{font-size:.67rem;color:#5a4a40;font-style:italic}
+
+/* Time off list */
+.timeoff-list{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.6rem}
+.timeoff-item{display:flex;justify-content:space-between;align-items:center;background:var(--coal);border:1px solid #3a342e;border-left:3px solid var(--timeoff-flag);border-radius:4px;padding:.38rem .6rem;font-size:.75rem}
+.timeoff-date{color:var(--timeoff-flag);font-family:'DM Mono',monospace}
+.timeoff-note{color:var(--ash);font-size:.68rem;margin-top:.08rem}
+.timeoff-remove{background:none;border:none;color:#5a4a40;cursor:pointer;font-size:.85rem;padding:0 .2rem}
+.timeoff-remove:hover{color:var(--danger-red)}
+.timeoff-add-row{display:flex;gap:.4rem;align-items:flex-end;flex-wrap:wrap}
+.timeoff-add-row input{flex:1;min-width:100px;margin-bottom:0}
+
+.toast{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--safe-green);color:#fff;padding:.55rem 1rem;border-radius:6px;font-size:.8rem;font-weight:600;opacity:0;transform:translateY(8px);transition:all .3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.error{background:var(--danger-red)}
+
+
+@media(max-width:800px){.main-wrap{grid-template-columns:1fr}.sidebar{max-height:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="flame-icon">🔥</div>
+  <div>
+    <h1>Kitchen <span>Scheduler</span></h1>
+    <p>FS &amp; SPF · AI-powered · 3-week generator</p>
+  </div>
+</header>
+
+<div class="main-wrap">
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <h2>Schedule Window</h2>
+    <label>Start Date</label>
+    <input type="text" id="startDate" placeholder="e.g. 06/22/2026"/>
+    <label>Manager Notes</label>
+    <textarea id="globalNotes" placeholder="e.g. Big event Fri week 2…" rows="2"></textarea>
+  </div>
+
+  <div class="sidebar-section">
+    <h2>Staff Roster</h2>
+    <div class="staff-list" id="staffList"></div>
+    <div class="add-staff-form">
+      <h3>+ Add Staff Member</h3>
+      <label>Full Name</label>
+      <input type="text" id="newName" placeholder="Jane Smith"/>
+      <label>Age Status</label>
+      <div class="checkbox-group" id="ageGroup">
+        <label class="check-chip checked"><input type="radio" name="ageStatus" value="adult" checked/> 18+ Adult</label>
+        <label class="check-chip"><input type="radio" name="ageStatus" value="minor"/> Under 18</label>
+      </div>
+      <label>Trained Stations</label>
+      <div class="checkbox-group" id="stationChips"></div>
+      <label>Works At</label>
+      <div class="checkbox-group" id="locChips">
+        <label class="check-chip"><input type="checkbox" value="FS"/> FS</label>
+        <label class="check-chip"><input type="checkbox" value="SPF"/> SPF</label>
+      </div>
+      <label>Available Days</label>
+      <div class="checkbox-group" id="availDays"></div>
+      <label>Shift Preference</label>
+      <div class="checkbox-group" id="prefShift">
+        <label class="check-chip"><input type="checkbox" value="Opener"/> Opener</label>
+        <label class="check-chip"><input type="checkbox" value="Closer"/> Closer</label>
+        <label class="check-chip checked"><input type="checkbox" value="Either" checked/> Either</label>
+      </div>
+      <label>Time Off (quick add)</label>
+      <input type="text" id="newTimeOff" placeholder="e.g. Jun 25, Jun 28–30"/>
+      <button class="btn btn-outline btn-sm btn-full" onclick="addStaff()">Add to Roster</button>
+    </div>
+  </div>
+
+
+</aside>
+
+<!-- ══════════ MAIN ══════════ -->
+<main class="main-area">
+  <div class="generate-bar">
+    <div>
+      <h2>3-Week Schedule</h2>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot dot-opener"></div> Opener 10am–4pm</div>
+        <div class="legend-item"><div class="legend-dot dot-mid"></div> Mid 2pm–8pm</div>
+        <div class="legend-item"><div class="legend-dot dot-closer"></div> Closer 4pm–10pm</div>
+        <div class="legend-item"><div class="legend-dot dot-timeoff" style="border-radius:50%"></div> Time-off conflict</div>
+      </div>
+    </div>
+    <button class="btn btn-ember" id="generateBtn" onclick="generateSchedule()">✦ Generate Schedule</button>
+  </div>
+
+  <div class="loc-tabs">
+    <button class="loc-tab fs active" onclick="showLoc('FS')">🔥 FS</button>
+    <button class="loc-tab spf" onclick="showLoc('SPF')">⚡ SPF</button>
+  </div>
+  <div class="week-tabs" id="weekTabs">
+    <button class="week-tab active" data-week="0" onclick="showWeek(0)">Week 1</button>
+    <button class="week-tab" data-week="1" onclick="showWeek(1)">Week 2</button>
+    <button class="week-tab" data-week="2" onclick="showWeek(2)">Week 3</button>
+  </div>
+
+  <div id="scheduleOutput">
+    <div class="empty-state">
+      <div class="big-icon">📋</div>
+      <p>Add your staff then click <strong>Generate Schedule</strong> to build all 3 weeks for both locations.</p>
+    </div>
+  </div>
+
+  <div class="notes-section" id="notesSection" style="display:none">
+    <h2 style="font-family:'DM Mono',monospace;font-size:.64rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ember);margin-bottom:.5rem">AI Notes &amp; Flags</h2>
+    <div class="ai-notes" id="aiNotes"></div>
+  </div>
+
+  <!-- Hours summary -->
+  <div class="hours-section" id="hoursSection" style="display:none">
+    <h2>Hours Summary</h2>
+    <div class="hours-table-wrap">
+      <table class="hours-table" id="hoursTable">
+        <thead>
+          <tr>
+            <th>Staff Member</th>
+            <th>Week 1</th><th>Week 2</th><th>Week 3</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="hoursBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ══════════ STAFF MODAL ══════════ -->
+<div class="modal-overlay" id="staffModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h3 id="modalTitle">Staff Details</h3>
+
+    <!-- Availability section -->
+    <div class="modal-section">
+      <h4>📅 Shift Availability by Day</h4>
+      <div class="avail-grid" id="availGrid"></div>
+    </div>
+
+    <!-- Time off section -->
+    <div class="modal-section">
+      <h4>⚠️ Time-Off Requests</h4>
+      <div class="timeoff-list" id="timeoffList"></div>
+      <div class="timeoff-add-row">
+        <div style="flex:1">
+          <label style="margin-bottom:.15rem">Date or Range</label>
+          <input type="text" id="toDate" placeholder="e.g. Jun 25 or Jun 28–30"/>
+        </div>
+        <div style="flex:1">
+          <label style="margin-bottom:.15rem">Reason (optional)</label>
+          <input type="text" id="toNote" placeholder="e.g. Doctor appt"/>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="addTimeOff()" style="margin-bottom:0;align-self:flex-end">Add</button>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+      <button class="btn btn-outline btn-sm" onclick="closeModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONSTANTS ───
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const ALL_STATIONS = ['Grill','Cash','Pizza','Expo','Fry','Ice Cream'];
+const MINOR_RESTRICTED = ['Grill','Fry','Pizza'];
+const SHIFTS_LIST = ['Opener','Mid','Closer'];
+
+const LOC_CONFIG = {
+  FS: {
+    stations:['Grill','Fry','Pizza','Expo','Cash','Ice Cream'],
+    shifts:{
+      opener:{ stations:['Grill','Cash','Expo'],  count:3, time:'10am–4pm' },
+      mid:   { stations:['Ice Cream'],             count:1, time:'2pm–8pm',  days:['Friday','Saturday','Sunday'] },
+      closer:{ stations:['Grill','Fry','Pizza'],   count:3, time:'4pm–10pm' }
+    }
+  },
+  SPF:{
+    stations:['Grill','Fry','Cash','Expo'],
+    shifts:{
+      opener:{ stations:['Grill','Cash'],  count:2, time:'10am–4pm' },
+      mid:   { stations:['Fry'],           count:1, time:'2pm–8pm',  days:['Friday','Saturday'] },
+      closer:{ stations:['Grill','Cash'],  count:2, time:'4pm–10pm' }
+    }
+  }
+};
+
+// ─── STATE ───
+let staffRoster = [];
+let scheduleData = { FS:[null,null,null], SPF:[null,null,null] };
+let currentLoc = 'FS';
+let currentWeek = 0;
+let modalStaffIdx = null;
+
+// ─── DEMO ROSTER ───
+staffRoster = [
+  { name:'Alex Rivera',   trainedStations:['Grill','Pizza','Cash','Ice Cream'],  locations:['FS','SPF'], minor:false, available:DAYS,                                                 pref:'Either',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Sam Torres',    trainedStations:['Fry','Grill','Expo'],                 locations:['FS'],       minor:false, available:DAYS,                                                 pref:'Opener',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Jordan Lee',    trainedStations:['Pizza','Cash','Expo'],                locations:['FS'],       minor:false, available:DAYS,                                                 pref:'Closer',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Casey Kim',     trainedStations:['Cash','Ice Cream','Expo'],            locations:['FS','SPF'], minor:false, available:DAYS,                                                 pref:'Either',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Morgan White',  trainedStations:['Expo','Cash','Fry','Grill'],          locations:['FS','SPF'], minor:false, available:DAYS,                                                 pref:'Either',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Drew Patel',    trainedStations:['Grill','Fry','Pizza'],                locations:['FS'],       minor:false, available:['Monday','Tuesday','Wednesday','Thursday','Friday'], pref:'Closer',  timeOff:[], dayAvail: defaultDayAvail(['Monday','Tuesday','Wednesday','Thursday','Friday']) },
+  { name:'Jamie Okafor',  trainedStations:['Pizza','Ice Cream','Cash'],           locations:['FS'],       minor:false, available:['Tuesday','Wednesday','Friday','Saturday','Sunday'], pref:'Either',  timeOff:[], dayAvail: defaultDayAvail(['Tuesday','Wednesday','Friday','Saturday','Sunday']) },
+  { name:'Reese Alvarez', trainedStations:['Fry','Expo','Ice Cream'],             locations:['FS','SPF'], minor:false, available:['Monday','Wednesday','Thursday','Saturday','Sunday'],pref:'Opener',  timeOff:[], dayAvail: defaultDayAvail(['Monday','Wednesday','Thursday','Saturday','Sunday']) },
+  { name:'Quinn Marsh',   trainedStations:['Cash','Expo','Pizza','Ice Cream'],    locations:['FS'],       minor:false, available:DAYS,                                                 pref:'Either',  timeOff:[], dayAvail: defaultDayAvail() },
+  { name:'Avery Singh',   trainedStations:['Grill','Fry','Cash'],                 locations:['FS','SPF'], minor:false, available:['Monday','Tuesday','Thursday','Friday','Saturday'],  pref:'Closer',  timeOff:[], dayAvail: defaultDayAvail(['Monday','Tuesday','Thursday','Friday','Saturday']) },
+  { name:'Taylor Brown',  trainedStations:['Cash','Expo','Ice Cream'],            locations:['FS','SPF'], minor:true,  available:['Monday','Tuesday','Wednesday','Friday','Saturday'],  pref:'Opener',  timeOff:[], dayAvail: defaultDayAvail(['Monday','Tuesday','Wednesday','Friday','Saturday']) },
+  { name:'Riley Nguyen',  trainedStations:['Cash','Ice Cream','Expo'],            locations:['FS','SPF'], minor:true,  available:['Thursday','Friday','Saturday','Sunday'],             pref:'Either',  timeOff:[], dayAvail: defaultDayAvail(['Thursday','Friday','Saturday','Sunday']) },
+  { name:'Skyler Tran',   trainedStations:['Ice Cream','Cash'],                   locations:['FS'],       minor:true,  available:['Friday','Saturday','Sunday'],                        pref:'Either',  timeOff:[], dayAvail: defaultDayAvail(['Friday','Saturday','Sunday']) },
+  { name:'Parker Jones',  trainedStations:['Cash','Expo','Ice Cream'],            locations:['FS','SPF'], minor:true,  available:['Monday','Wednesday','Friday','Saturday'],            pref:'Opener',  timeOff:[], dayAvail: defaultDayAvail(['Monday','Wednesday','Friday','Saturday']) },
+  { name:'Finley Cruz',   trainedStations:['Expo','Pizza','Grill','Fry','Cash'],  locations:['FS','SPF'], minor:false, available:['Tuesday','Thursday','Friday','Saturday','Sunday'],   pref:'Either',  timeOff:[], dayAvail: defaultDayAvail(['Tuesday','Thursday','Friday','Saturday','Sunday']) },
+];
+
+function defaultDayAvail(availDays) {
+  const avail = availDays || DAYS;
+  const result = {};
+  DAYS.forEach(d => {
+    if (avail.includes(d)) result[d] = ['Opener','Mid','Closer'];
+    else result[d] = [];
+  });
+  return result;
+}
+
+// ─── INIT ───
+function init() {
+  renderStationChips(); renderAvailDays(); renderStaffList();
+}
+
+function renderStationChips() {
+  document.getElementById('stationChips').innerHTML = ALL_STATIONS.map(s =>
+    `<label class="check-chip"><input type="checkbox" value="${s}"/> ${s}</label>`).join('');
+}
+function renderAvailDays() {
+  document.getElementById('availDays').innerHTML = DAYS.map(d =>
+    `<label class="check-chip checked-avail"><input type="checkbox" value="${d}" checked/> ${d.slice(0,3)}</label>`).join('');
+}
+
+// Chip delegation
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.check-chip');
+  if (!chip) return;
+  const inp = chip.querySelector('input');
+  if (!inp) return;
+  if (inp.type==='radio') {
+    chip.closest('.checkbox-group').querySelectorAll('.check-chip').forEach(c=>c.classList.remove('checked'));
+    chip.classList.add('checked');
+  } else if (chip.closest('#availDays')) {
+    chip.classList.toggle('checked-avail', inp.checked);
+  } else if (chip.closest('#locChips')) {
+    chip.classList.toggle('checked-loc', inp.checked);
+  } else {
+    chip.classList.toggle('checked', inp.checked);
+  }
+});
+
+function renderStaffList() {
+  const el = document.getElementById('staffList');
+  if (!staffRoster.length) {
+    el.innerHTML='<p style="font-size:.72rem;color:var(--ash);text-align:center;padding:.5rem">No staff added yet.</p>'; return;
+  }
+  el.innerHTML = staffRoster.map((s,i) => {
+    const hasPendingTO = s.timeOff && s.timeOff.length > 0;
+    return `<div class="staff-card">
+      <div class="staff-card-header">
+        <span class="staff-name">${s.name}</span>
+        <span class="badges">
+          <span class="badge ${s.minor?'badge-minor':'badge-adult'}">${s.minor?'Minor':'Adult'}</span>
+          ${s.locations.map(l=>`<span class="badge badge-loc">${l}</span>`).join('')}
+          ${hasPendingTO?`<span class="badge badge-timeoff">⚠ ${s.timeOff.length} Time Off</span>`:''}
+        </span>
+      </div>
+      <div class="staff-meta">
+        <span>${s.trainedStations.join(', ')}</span> · <span style="color:var(--ash)">${s.pref}</span>
+        ${s.minor?'<br><span style="color:#ffcba0;font-size:.65rem">⚠ No Grill, Fry, Pizza</span>':''}
+        <br>Avail: <span>${s.available.map(d=>d.slice(0,3)).join(', ')}</span>
+      </div>
+      <div class="staff-actions">
+        <button class="action-btn" onclick="openModal(${i})">📅 Availability &amp; Time Off</button>
+        <button class="action-btn danger" onclick="removeStaff(${i})">✕ Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addStaff() {
+  const name = document.getElementById('newName').value.trim();
+  if (!name) { showToast('Enter a name.',true); return; }
+  const stChecked = [...document.querySelectorAll('#stationChips input:checked')].map(c=>c.value);
+  if (!stChecked.length) { showToast('Select at least one station.',true); return; }
+  const locChecked = [...document.querySelectorAll('#locChips input:checked')].map(c=>c.value);
+  if (!locChecked.length) { showToast('Select at least one location.',true); return; }
+  const minor = document.querySelector('#ageGroup input[value="minor"]')?.checked||false;
+  const effectiveStations = minor ? stChecked.filter(s=>!MINOR_RESTRICTED.includes(s)) : stChecked;
+  if (minor&&!effectiveStations.length) { showToast('Minor needs Cash, Expo, or Ice Cream.',true); return; }
+  const available = [...document.querySelectorAll('#availDays input:checked')].map(c=>c.value);
+  if (!available.length) { showToast('Select at least one available day.',true); return; }
+  const prefArr = [...document.querySelectorAll('#prefShift input:checked')].map(c=>c.value);
+  const pref = prefArr.length ? prefArr.join('/') : 'Either';
+  const timeOffRaw = document.getElementById('newTimeOff').value.trim();
+  const timeOff = timeOffRaw ? [{date:timeOffRaw, note:''}] : [];
+  staffRoster.push({ name, trainedStations:effectiveStations, locations:locChecked, minor, available, pref, timeOff, dayAvail:defaultDayAvail(available) });
+  renderStaffList();
+  document.getElementById('newName').value='';
+  document.getElementById('newTimeOff').value='';
+  renderStationChips(); renderAvailDays();
+  showToast(`${name} added.`);
+}
+
+function removeStaff(i) {
+  const n=staffRoster[i].name; staffRoster.splice(i,1); renderStaffList(); showToast(`${n} removed.`);
+}
+
+// ─── MODAL ───
+function openModal(idx) {
+  modalStaffIdx = idx;
+  const s = staffRoster[idx];
+  document.getElementById('modalTitle').textContent = `${s.name} — Availability & Time Off`;
+  renderAvailGrid(s);
+  renderTimeoffList(s);
+  document.getElementById('toDate').value='';
+  document.getElementById('toNote').value='';
+  document.getElementById('staffModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('staffModal').classList.remove('open');
+  renderStaffList();
+  modalStaffIdx = null;
+}
+
+function renderAvailGrid(s) {
+  const grid = document.getElementById('availGrid');
+  grid.innerHTML = DAYS.map(day => {
+    const dayShifts = s.dayAvail[day] || [];
+    const isAvailDay = s.available.includes(day);
+    if (!isAvailDay) {
+      return `<div class="avail-row">
+        <span class="avail-day-label">${day.slice(0,3)}</span>
+        <span class="avail-off-label">Not available this day</span>
+      </div>`;
+    }
+    return `<div class="avail-row">
+      <span class="avail-day-label">${day.slice(0,3)}</span>
+      <div class="avail-shifts">
+        ${SHIFTS_LIST.map(sh => {
+          const on = dayShifts.includes(sh);
+          return `<span class="shift-chip avail-${sh.toLowerCase()} ${on?'on':''}"
+            onclick="toggleDayShift(${modalStaffIdx},'${day}','${sh}',this)">${sh}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDayShift(idx, day, shift, el) {
+  const s = staffRoster[idx];
+  if (!s.dayAvail[day]) s.dayAvail[day] = [];
+  const arr = s.dayAvail[day];
+  const i = arr.indexOf(shift);
+  if (i>=0) arr.splice(i,1); else arr.push(shift);
+  el.classList.toggle('on', arr.includes(shift));
+}
+
+function renderTimeoffList(s) {
+  const el = document.getElementById('timeoffList');
+  if (!s.timeOff || !s.timeOff.length) {
+    el.innerHTML='<p style="font-size:.72rem;color:var(--ash);font-style:italic">No time-off requests yet.</p>'; return;
+  }
+  el.innerHTML = s.timeOff.map((to,i) => `
+    <div class="timeoff-item">
+      <div>
+        <div class="timeoff-date">⚠ ${to.date}</div>
+        ${to.note?`<div class="timeoff-note">${to.note}</div>`:''}
+      </div>
+      <button class="timeoff-remove" onclick="removeTimeOff(${modalStaffIdx},${i})">×</button>
+    </div>`).join('');
+}
+
+function addTimeOff() {
+  const date = document.getElementById('toDate').value.trim();
+  if (!date) { showToast('Enter a date or range.',true); return; }
+  const note = document.getElementById('toNote').value.trim();
+  const s = staffRoster[modalStaffIdx];
+  if (!s.timeOff) s.timeOff=[];
+  s.timeOff.push({date, note});
+  renderTimeoffList(s);
+  document.getElementById('toDate').value='';
+  document.getElementById('toNote').value='';
+  showToast('Time-off request added & flagged.');
+}
+
+function removeTimeOff(sIdx, toIdx) {
+  staffRoster[sIdx].timeOff.splice(toIdx,1);
+  renderTimeoffList(staffRoster[sIdx]);
+}
+
+// Expose for external webhook use (Zapier integration point)
+window.addTimeOffExternal = function(staffName, date, note='') {
+  const idx = staffRoster.findIndex(s=>s.name.toLowerCase()===staffName.toLowerCase());
+  if (idx<0) { console.warn('Staff not found:',staffName); return; }
+  if (!staffRoster[idx].timeOff) staffRoster[idx].timeOff=[];
+  staffRoster[idx].timeOff.push({date, note});
+  renderStaffList();
+  console.log(`Time off added for ${staffName}: ${date}`);
+};
+
+// ─── LOCATION / WEEK TABS ───
+function showLoc(loc) {
+  currentLoc=loc;
+  document.querySelectorAll('.loc-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.loc-tab.${loc.toLowerCase()}`).classList.add('active');
+  renderSchedule(currentWeek);
+}
+function showWeek(w) {
+  currentWeek=w;
+  document.querySelectorAll('.week-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.week)===w));
+  renderSchedule(w);
+}
+
+// ─── AI ───
+function slimStaff(roster, loc) {
+  // Only send fields the AI needs — strips dayAvail, keeps it compact
+  return roster
+    .filter(s => s.locations.includes(loc))
+    .map(s => ({
+      n: s.name,
+      st: s.trainedStations,
+      minor: s.minor || undefined,
+      avail: s.available,
+      pref: s.pref !== 'Either' ? s.pref : undefined,
+      off: s.timeOff && s.timeOff.length ? s.timeOff.map(t=>t.date) : undefined,
+      dayAvail: (() => {
+        // Only include days where not all shifts available
+        const da = {};
+        DAYS.forEach(d => {
+          const shifts = s.dayAvail[d] || [];
+          if (shifts.length > 0 && shifts.length < 3) da[d] = shifts;
+          else if (shifts.length === 0 && s.available.includes(d)) da[d] = [];
+        });
+        return Object.keys(da).length ? da : undefined;
+      })()
+    }));
+}
+
+// Build a prompt for a SINGLE DAY — tiny output, can never be truncated
+function buildDayPrompt(loc, dayName, dateStr, staffJSON, globalNotes, hoursBalance, hasMid) {
+  var cfg = LOC_CONFIG[loc];
+  var spfRule = loc === 'SPF' ? 'SPF rule: never 2 minors in same shift; minor must be on Cash; always 1 adult on Grill/Fry.' : '';
+  var openerStations = cfg.shifts.opener.stations;
+  var closerStations = cfg.shifts.closer.stations;
+  var midStations = hasMid ? cfg.shifts.mid.stations : null;
+
+  var schemaObj = {
+    day: dayName,
+    date: dateStr,
+    opener: {},
+    mid: midStations ? {} : null,
+    closer: {}
+  };
+  openerStations.forEach(function(s){ schemaObj.opener[s] = null; });
+  closerStations.forEach(function(s){ schemaObj.closer[s] = null; });
+  if (midStations) { midStations.forEach(function(s){ schemaObj.mid[s] = null; }); }
+
+  var parts = [];
+  parts.push('TASK: Schedule ONE day. Location=' + loc + ' Day=' + dayName + ' Date=' + dateStr);
+  parts.push('OPENER ' + cfg.shifts.opener.time + ': stations=' + openerStations.join(','));
+  if (midStations) { parts.push('MID ' + cfg.shifts.mid.time + ': stations=' + midStations.join(',')); }
+  else { parts.push('MID: none today'); }
+  parts.push('CLOSER ' + cfg.shifts.closer.time + ': stations=' + closerStations.join(','));
+  if (spfRule) { parts.push(spfRule); }
+  parts.push('RULES: assign only to stations in st[]; only if ' + dayName + ' in avail[]; respect dayAvail shift limits; skip if date in off[]; null if no one qualifies; each person once only today.');
+  if (hoursBalance) { parts.push('HOURS THIS WEEK: ' + hoursBalance); }
+  if (globalNotes) { parts.push('MANAGER NOTE: ' + globalNotes); }
+  parts.push('STAFF: ' + staffJSON);
+  parts.push('OUTPUT: return ONLY the following JSON with null values replaced by staff names. No other text, no explanation.');
+  parts.push(JSON.stringify(schemaObj));
+  return parts.join('\n');
+}
+
+async function callAI(prompt) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      system: 'You are a JSON-only scheduling engine. You output a single valid JSON object and nothing else — no prose, no explanation, no markdown. Your entire response must be parseable by JSON.parse().',
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const data = await r.json();
+  if (data.error) throw new Error(JSON.stringify(data.error));
+  const raw = data.content.map(b => b.text || '').join('');
+  // Strip ALL markdown fences and whitespace, then extract {...}
+  const stripped = raw.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
+  if (start === -1 || end === -1) {
+    throw new Error('No JSON in response. AI said: ' + raw.slice(0, 120));
+  }
+  return JSON.parse(stripped.slice(start, end + 1));
+}
+
+function countHoursWeek(weekData) {
+  if (!weekData?.days) return {};
+  const counts={};
+  weekData.days.forEach(day=>{
+    ['opener','mid','closer'].forEach(sh=>{
+      if (!day[sh]) return;
+      Object.values(day[sh]).forEach(n=>{ if(n) counts[n]=(counts[n]||0)+6; });
+    });
+  });
+  return counts;
+}
+
+function getDayDate(baseDate, weekOffset, dayIndex) {
+  let d;
+  if (!baseDate || baseDate === 'the upcoming Monday') {
+    d = new Date();
+    const dow = d.getDay();
+    d.setDate(d.getDate() + (dow === 0 ? 1 : (8 - dow) % 7 || 7));
+  } else {
+    d = new Date(baseDate);
+  }
+  d.setDate(d.getDate() + weekOffset * 7 + dayIndex);
+  return {
+    long: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    short: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  };
+}
+
+async function generateSchedule() {
+  if (staffRoster.length < 2) { showToast('Add at least 2 staff first.', true); return; }
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  scheduleData = { FS: [null, null, null], SPF: [null, null, null] };
+  renderSchedule(currentWeek);
+  document.getElementById('notesSection').style.display = 'none';
+  document.getElementById('hoursSection').style.display = 'none';
+
+  const startDate = document.getElementById('startDate').value.trim() || 'the upcoming Monday';
+  const globalNotes = document.getElementById('globalNotes').value.trim();
+  const totalCalls = 2 * 3 * 7; // locs * weeks * days = 42
+  let done = 0;
+
+  for (const loc of ['FS', 'SPF']) {
+    const slim = JSON.stringify(slimStaff(staffRoster, loc));
+    const hoursLog = {}; // track hours across weeks for balance
+
+    for (let w = 0; w < 3; w++) {
+      setWeekTabLoading(w, true);
+      const days = [];
+
+      for (let d = 0; d < 7; d++) {
+        done++;
+        const dayName = DAYS[d];
+        const dateInfo = getDayDate(startDate, w, d);
+        const cfg = LOC_CONFIG[loc];
+        const hasMid = cfg.shifts.mid && cfg.shifts.mid.days && cfg.shifts.mid.days.includes(dayName);
+        const balanceSummary = Object.entries(hoursLog).map(([n,h]) => n+':'+h+'h').join(',');
+
+        btn.innerHTML = '<span class="loading-spinner"></span> ' + loc + ' W' + (w+1) + ' ' + dayName.slice(0,3) + ' (' + done + '/' + totalCalls + ')…';
+
+        try {
+          const dayResult = await callAI(buildDayPrompt(loc, dayName, dateInfo.short, slim, globalNotes, balanceSummary, hasMid));
+          // Tally hours
+          ['opener','mid','closer'].forEach(sh => {
+            if (!dayResult[sh]) return;
+            Object.values(dayResult[sh]).forEach(n => { if (n) hoursLog[n] = (hoursLog[n]||0) + 6; });
+          });
+          days.push(dayResult);
+        } catch(err) {
+          console.error(loc + ' W' + (w+1) + ' ' + dayName + ':', err);
+          // Push a blank day so the week still renders
+          days.push({ day: dayName, date: dateInfo.short, opener: {}, mid: null, closer: {}, error: true });
+          if (err.message.includes('exceeded')) {
+            showToast('Rate limit hit — pausing 10s…', true);
+            await new Promise(r => setTimeout(r, 10000));
+          }
+        }
+      }
+
+      scheduleData[loc][w] = {
+        weekNumber: w + 1,
+        location: loc,
+        startDate: getDayDate(startDate, w, 0).long,
+        days: days,
+        notes: ''
+      };
+      setWeekTabLoading(w, false);
+      if (currentLoc === loc && currentWeek === w) renderSchedule(w);
+    }
+  }
+
+  renderHoursSummary();
+  btn.disabled = false;
+  btn.innerHTML = '✦ Regenerate Schedule';
+  showToast('All schedules generated! ✦');
+}
+
+function setWeekTabLoading(w,loading) {
+  const tabs=document.querySelectorAll('.week-tab');
+  if(tabs[w]) tabs[w].innerHTML=loading
+    ?`Week ${w+1} <span class="loading-spinner" style="width:.6rem;height:.6rem;border-width:1.5px"></span>`
+    :`Week ${w+1}`;
+}
+
+// ─── CHECK TIME OFF CONFLICT ───
+function getTimeoffDates(staff) {
+  if (!staff.timeOff||!staff.timeOff.length) return [];
+  return staff.timeOff.map(to=>to.date.toLowerCase());
+}
+
+function hasTimeOffConflict(staffName, dateStr) {
+  const s = staffRoster.find(x=>x.name===staffName);
+  if (!s||!s.timeOff||!s.timeOff.length) return false;
+  const dl = dateStr.toLowerCase();
+  return s.timeOff.some(to=>{
+    const tl=to.date.toLowerCase();
+    return dl.includes(tl)||tl.includes(dl)||
+      dl.split(' ').some(w=>tl.includes(w)&&w.length>2);
+  });
+}
+
+// ─── RENDER SCHEDULE ───
+function renderSchedule(weekIdx) {
+  const week=scheduleData[currentLoc]?.[weekIdx];
+  const cfg=LOC_CONFIG[currentLoc];
+  if (!week) {
+    document.getElementById('scheduleOutput').innerHTML=`
+      <div class="empty-state">
+        <div style="font-size:1.6rem"><span class="loading-spinner" style="width:1.6rem;height:1.6rem;border-width:3px"></span></div>
+        <p>${Object.values(scheduleData).some(v=>v.some(w=>w)) ? `Building ${currentLoc} Week ${weekIdx+1}…` : 'Click Generate Schedule to begin.'}</p>
+      </div>`; return;
+  }
+
+  const isMinor=name=>staffRoster.find(x=>x.name===name)?.minor;
+  const usedStations=[...new Set(Object.values(cfg.shifts).flatMap(sh=>sh.stations))];
+  const shiftKeys=Object.keys(cfg.shifts);
+
+  const slotHtml=(name,type,dateStr)=>{
+    if (!name) return `<span style="color:#4a4038;font-style:italic;font-size:.7rem">—</span>`;
+    const conflict=hasTimeOffConflict(name,dateStr);
+    return `<div class="shift-slot ${type}${conflict?' timeoff-conflict':''}" title="${conflict?'⚠ Time-off conflict!':''}">
+      ${name}${isMinor(name)?'<span class="shift-minor-flag">minor</span>':''}${conflict?' ⚠':''}
+    </div>`;
+  };
+
+  let html=`<div class="schedule-wrap"><table class="schedule-table"><thead><tr>
+    <th class="day-col">Day</th>
+    ${usedStations.map(s=>`<th>${s}</th>`).join('')}
+  </tr></thead><tbody>`;
+
+  week.days.forEach(day=>{
+    const isWeekend=cfg.shifts.mid?.days?.includes(day.day);
+    const dateStr=day.date||day.day;
+
+    // check if any scheduled person has time off this day
+    const allNamesThisDay=new Set();
+    shiftKeys.forEach(sk=>{ if(day[sk]) Object.values(day[sk]).forEach(n=>{ if(n) allNamesThisDay.add(n); }); });
+    const dayHasConflict=[...allNamesThisDay].some(n=>hasTimeOffConflict(n,dateStr));
+
+    shiftKeys.forEach((shiftKey,si)=>{
+      const shiftCfg=cfg.shifts[shiftKey];
+      if (shiftKey==='mid'&&!isWeekend) return;
+      const shiftData=day[shiftKey];
+      const rowClass=dayHasConflict?'timeoff-row':'';
+
+      html+=`<tr class="${rowClass}">
+        <td>
+          ${si===0?`<div class="day-label">${day.day}</div><div class="date-sub">${day.date||''}</div>`:''}
+          <div class="shift-label ${shiftKey}">${shiftKey.toUpperCase()} <span style="font-size:.56rem;opacity:.65">${shiftCfg.time}</span></div>
+          ${si===0&&dayHasConflict?`<div class="timeoff-marker">⚠ conflict</div>`:''}
+        </td>
+        ${usedStations.map(st=>{
+          if (!shiftCfg.stations.includes(st)) return `<td></td>`;
+          return `<td>${slotHtml(shiftData?.[st]||null,shiftKey,dateStr)}</td>`;
+        }).join('')}
+      </tr>`;
+    });
+    html+=`<tr class="day-divider"><td colspan="${usedStations.length+1}"></td></tr>`;
+  });
+
+  html+=`</tbody></table></div>`;
+  document.getElementById('scheduleOutput').innerHTML=html;
+}
+
+// ─── HOURS SUMMARY ───
+function renderHoursSummary() {
+  const allNames=[...new Set(staffRoster.map(s=>s.name))];
+  if (!allNames.length) return;
+
+  // collect hours per person per week (across both locations)
+  const hoursGrid={}; // name -> [w1,w2,w3]
+  allNames.forEach(n=>{ hoursGrid[n]=[0,0,0]; });
+
+  ['FS','SPF'].forEach(loc=>{
+    for(let w=0;w<3;w++){
+      const wd=scheduleData[loc][w];
+      if (!wd) continue;
+      const wh=countHoursWeek(wd);
+      Object.entries(wh).forEach(([n,h])=>{
+        if (hoursGrid[n]) hoursGrid[n][w]+=h;
+      });
+    }
+  });
+
+  const maxHrs=Math.max(...Object.values(hoursGrid).map(a=>a.reduce((s,v)=>s+v,0)),1);
+
+  const tbody=document.getElementById('hoursBody');
+  tbody.innerHTML=allNames.sort((a,b)=>{
+    const ta=hoursGrid[a].reduce((s,v)=>s+v,0);
+    const tb=hoursGrid[b].reduce((s,v)=>s+v,0);
+    return tb-ta;
+  }).map(name=>{
+    const [w1,w2,w3]=hoursGrid[name];
+    const total=w1+w2+w3;
+    const pct=Math.round((total/maxHrs)*100);
+    const barClass=pct>85?'over':pct>40?'balanced':'';
+    return `<tr>
+      <td><span class="hours-name">${name}</span>${staffRoster.find(s=>s.name===name)?.minor?'<span class="badge badge-minor" style="margin-left:.4rem">minor</span>':''}</td>
+      <td>${w1?`${w1}h`:'—'}</td>
+      <td>${w2?`${w2}h`:'—'}</td>
+      <td>${w3?`${w3}h`:'—'}</td>
+      <td>
+        <span class="hours-total">${total}h</span>
+        <span class="hours-bar-wrap"><span class="hours-bar ${barClass}" style="width:${pct}%"></span></span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('hoursSection').style.display='block';
+}
+
+// ─── TOAST ───
+function showToast(msg,error=false) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(error?' error':'');
+  setTimeout(()=>{ t.className='toast'; },3500);
+}
+
+init();
+</script>
+</body>
+</html>
