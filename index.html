@@ -756,7 +756,7 @@ async function generateSchedule() {
           done++;
           
           // Wait 3 seconds before asking the AI for the next day to prevent rate limiting
-          await sleep(3000); 
+          await sleep(15000); 
 
         } catch(err) {
           console.error(loc + ' W' + (w+1) + ' ' + dayName + ':', err);
