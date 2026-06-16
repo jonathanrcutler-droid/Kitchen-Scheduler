@@ -30,8 +30,8 @@ header p{font-size:.7rem;color:var(--ash);font-family:'DM Mono',monospace;text-t
 .sidebar-section{margin-bottom:1.5rem}
 .sidebar-section h2{font-family:'DM Mono',monospace;font-size:.64rem;text-transform:uppercase;letter-spacing:.15em;color:var(--ember);margin-bottom:.65rem;padding-bottom:.32rem;border-bottom:1px solid var(--ember-dim)}
 label{display:block;font-size:.73rem;color:var(--ash);margin-bottom:.18rem;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.07em}
-input[type="text"],textarea,select{width:100%;background:var(--coal);border:1px solid #4a4038;color:var(--cream);padding:.45rem .65rem;border-radius:4px;font-size:.83rem;font-family:'Inter',sans-serif;margin-bottom:.6rem;outline:none;transition:border-color .2s}
-input[type="text"]:focus,textarea:focus,select:focus{border-color:var(--ember)}
+input[type="text"],input[type="password"],textarea,select{width:100%;background:var(--coal);border:1px solid #4a4038;color:var(--cream);padding:.45rem .65rem;border-radius:4px;font-size:.83rem;font-family:'Inter',sans-serif;margin-bottom:.6rem;outline:none;transition:border-color .2s}
+input[type="text"]:focus,input[type="password"]:focus,textarea:focus,select:focus{border-color:var(--ember)}
 textarea{resize:vertical;min-height:48px}
 
 /* Staff cards */
@@ -179,7 +179,6 @@ textarea{resize:vertical;min-height:48px}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.error{background:var(--danger-red)}
 
-
 @media(max-width:800px){.main-wrap{grid-template-columns:1fr}.sidebar{max-height:none}}
 </style>
 </head>
@@ -189,13 +188,21 @@ textarea{resize:vertical;min-height:48px}
   <div class="flame-icon">🔥</div>
   <div>
     <h1>Kitchen <span>Scheduler</span></h1>
-    <p>FS &amp; SPF · AI-powered · 3-week generator</p>
+    <p>FS &amp; SPF · Powered by Google Gemini</p>
   </div>
 </header>
 
 <div class="main-wrap">
 <!-- ══════════ SIDEBAR ══════════ -->
 <aside class="sidebar">
+
+  <div class="sidebar-section">
+    <h2>API Configuration</h2>
+    <label>Gemini API Key</label>
+    <input type="password" id="apiKey" placeholder="Paste your free Gemini API key here"/>
+    <p style="font-size: .65rem; color: var(--ash); margin-top: .2rem;">Get a free key at <a href="https://aistudio.google.com/" target="_blank" style="color: var(--highlight); text-decoration: none;">Google AI Studio</a></p>
+  </div>
+
   <div class="sidebar-section">
     <h2>Schedule Window</h2>
     <label>Start Date</label>
@@ -236,7 +243,6 @@ textarea{resize:vertical;min-height:48px}
       <button class="btn btn-outline btn-sm btn-full" onclick="addStaff()">Add to Roster</button>
     </div>
   </div>
-
 
 </aside>
 
@@ -568,16 +574,6 @@ function removeTimeOff(sIdx, toIdx) {
   renderTimeoffList(staffRoster[sIdx]);
 }
 
-// Expose for external webhook use (Zapier integration point)
-window.addTimeOffExternal = function(staffName, date, note='') {
-  const idx = staffRoster.findIndex(s=>s.name.toLowerCase()===staffName.toLowerCase());
-  if (idx<0) { console.warn('Staff not found:',staffName); return; }
-  if (!staffRoster[idx].timeOff) staffRoster[idx].timeOff=[];
-  staffRoster[idx].timeOff.push({date, note});
-  renderStaffList();
-  console.log(`Time off added for ${staffName}: ${date}`);
-};
-
 // ─── LOCATION / WEEK TABS ───
 function showLoc(loc) {
   currentLoc=loc;
@@ -591,7 +587,7 @@ function showWeek(w) {
   renderSchedule(w);
 }
 
-// ─── AI ───
+// ─── AI (GEMINI) ───
 function slimStaff(roster, loc) {
   // Only send fields the AI needs — strips dayAvail, keeps it compact
   return roster
@@ -604,7 +600,6 @@ function slimStaff(roster, loc) {
       pref: s.pref !== 'Either' ? s.pref : undefined,
       off: s.timeOff && s.timeOff.length ? s.timeOff.map(t=>t.date) : undefined,
       dayAvail: (() => {
-        // Only include days where not all shifts available
         const da = {};
         DAYS.forEach(d => {
           const shifts = s.dayAvail[d] || [];
@@ -616,7 +611,6 @@ function slimStaff(roster, loc) {
     }));
 }
 
-// Build a prompt for a SINGLE DAY — tiny output, can never be truncated
 function buildDayPrompt(loc, dayName, dateStr, staffJSON, globalNotes, hoursBalance, hasMid) {
   var cfg = LOC_CONFIG[loc];
   var spfRule = loc === 'SPF' ? 'SPF rule: never 2 minors in same shift; minor must be on Cash; always 1 adult on Grill/Fry.' : '';
@@ -652,27 +646,43 @@ function buildDayPrompt(loc, dayName, dateStr, staffJSON, globalNotes, hoursBala
 }
 
 async function callAI(prompt) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) {
+    throw new Error('Missing API Key');
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const payload = {
+    systemInstruction: {
+      parts: [{ text: 'You are a JSON-only scheduling engine. You output a single valid JSON object and nothing else. No markdown formatting, no code blocks, no prose. Your entire response must be strictly parseable by JSON.parse().' }]
+    },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      maxOutputTokens: 800
+    }
+  };
+
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      system: 'You are a JSON-only scheduling engine. You output a single valid JSON object and nothing else — no prose, no explanation, no markdown. Your entire response must be parseable by JSON.parse().',
-      messages: [{ role: 'user', content: prompt }]
-    })
+    body: JSON.stringify(payload)
   });
+
   const data = await r.json();
-  if (data.error) throw new Error(JSON.stringify(data.error));
-  const raw = data.content.map(b => b.text || '').join('');
-  // Strip ALL markdown fences and whitespace, then extract {...}
-  const stripped = raw.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
-  const start = stripped.indexOf('{');
-  const end = stripped.lastIndexOf('}');
-  if (start === -1 || end === -1) {
-    throw new Error('No JSON in response. AI said: ' + raw.slice(0, 120));
+
+  if (data.error) {
+    throw new Error(data.error.message || JSON.stringify(data.error));
   }
-  return JSON.parse(stripped.slice(start, end + 1));
+
+  try {
+    const raw = data.candidates[0].content.parts[0].text;
+    const stripped = raw.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+    return JSON.parse(stripped);
+  } catch (e) {
+    throw new Error('Failed to parse AI response. ' + e.message);
+  }
 }
 
 function countHoursWeek(weekData) {
@@ -704,7 +714,10 @@ function getDayDate(baseDate, weekOffset, dayIndex) {
 }
 
 async function generateSchedule() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { showToast('Please enter your Gemini API Key in the sidebar first.', true); return; }
   if (staffRoster.length < 2) { showToast('Add at least 2 staff first.', true); return; }
+
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
   scheduleData = { FS: [null, null, null], SPF: [null, null, null] };
@@ -714,12 +727,12 @@ async function generateSchedule() {
 
   const startDate = document.getElementById('startDate').value.trim() || 'the upcoming Monday';
   const globalNotes = document.getElementById('globalNotes').value.trim();
-  const totalCalls = 2 * 3 * 7; // locs * weeks * days = 42
+  const totalCalls = 2 * 3 * 7; 
   let done = 0;
 
   for (const loc of ['FS', 'SPF']) {
     const slim = JSON.stringify(slimStaff(staffRoster, loc));
-    const hoursLog = {}; // track hours across weeks for balance
+    const hoursLog = {}; 
 
     for (let w = 0; w < 3; w++) {
       setWeekTabLoading(w, true);
@@ -737,7 +750,6 @@ async function generateSchedule() {
 
         try {
           const dayResult = await callAI(buildDayPrompt(loc, dayName, dateInfo.short, slim, globalNotes, balanceSummary, hasMid));
-          // Tally hours
           ['opener','mid','closer'].forEach(sh => {
             if (!dayResult[sh]) return;
             Object.values(dayResult[sh]).forEach(n => { if (n) hoursLog[n] = (hoursLog[n]||0) + 6; });
@@ -745,9 +757,15 @@ async function generateSchedule() {
           days.push(dayResult);
         } catch(err) {
           console.error(loc + ' W' + (w+1) + ' ' + dayName + ':', err);
-          // Push a blank day so the week still renders
           days.push({ day: dayName, date: dateInfo.short, opener: {}, mid: null, closer: {}, error: true });
-          if (err.message.includes('exceeded')) {
+          
+          if (err.message.includes('API Key')) {
+            showToast('Missing or Invalid API Key. Stopping.', true);
+            btn.disabled = false;
+            btn.innerHTML = '✦ Generate Schedule';
+            return;
+          }
+          if (err.message.includes('429') || err.message.toLowerCase().includes('quota')) {
             showToast('Rate limit hit — pausing 10s…', true);
             await new Promise(r => setTimeout(r, 10000));
           }
@@ -829,7 +847,6 @@ function renderSchedule(weekIdx) {
     const isWeekend=cfg.shifts.mid?.days?.includes(day.day);
     const dateStr=day.date||day.day;
 
-    // check if any scheduled person has time off this day
     const allNamesThisDay=new Set();
     shiftKeys.forEach(sk=>{ if(day[sk]) Object.values(day[sk]).forEach(n=>{ if(n) allNamesThisDay.add(n); }); });
     const dayHasConflict=[...allNamesThisDay].some(n=>hasTimeOffConflict(n,dateStr));
@@ -864,8 +881,7 @@ function renderHoursSummary() {
   const allNames=[...new Set(staffRoster.map(s=>s.name))];
   if (!allNames.length) return;
 
-  // collect hours per person per week (across both locations)
-  const hoursGrid={}; // name -> [w1,w2,w3]
+  const hoursGrid={}; 
   allNames.forEach(n=>{ hoursGrid[n]=[0,0,0]; });
 
   ['FS','SPF'].forEach(loc=>{
