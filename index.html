@@ -193,7 +193,6 @@ textarea{resize:vertical;min-height:48px}
 </header>
 
 <div class="main-wrap">
-<!-- ══════════ SIDEBAR ══════════ -->
 <aside class="sidebar">
 
   <div class="sidebar-section">
@@ -246,7 +245,6 @@ textarea{resize:vertical;min-height:48px}
 
 </aside>
 
-<!-- ══════════ MAIN ══════════ -->
 <main class="main-area">
   <div class="generate-bar">
     <div>
@@ -283,7 +281,6 @@ textarea{resize:vertical;min-height:48px}
     <div class="ai-notes" id="aiNotes"></div>
   </div>
 
-  <!-- Hours summary -->
   <div class="hours-section" id="hoursSection" style="display:none">
     <h2>Hours Summary</h2>
     <div class="hours-table-wrap">
@@ -302,19 +299,16 @@ textarea{resize:vertical;min-height:48px}
 </main>
 </div>
 
-<!-- ══════════ STAFF MODAL ══════════ -->
 <div class="modal-overlay" id="staffModal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">×</button>
     <h3 id="modalTitle">Staff Details</h3>
 
-    <!-- Availability section -->
     <div class="modal-section">
       <h4>📅 Shift Availability by Day</h4>
       <div class="avail-grid" id="availGrid"></div>
     </div>
 
-    <!-- Time off section -->
     <div class="modal-section">
       <h4>⚠️ Time-Off Requests</h4>
       <div class="timeoff-list" id="timeoffList"></div>
@@ -651,7 +645,8 @@ async function callAI(prompt) {
     throw new Error('Missing API Key');
   }
 
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
   const payload = {
     systemInstruction: {
       parts: [{ text: 'You are a JSON-only scheduling engine. You output a single valid JSON object and nothing else. No markdown formatting, no code blocks, no prose. Your entire response must be strictly parseable by JSON.parse().' }]
@@ -804,6 +799,92 @@ async function generateSchedule() {
   btn.disabled = false;
   btn.innerHTML = '✦ Regenerate Schedule';
   showToast('All schedules generated! ✦');
+}
+
+function setWeekTabLoading(w,loading) {
+  const tabs=document.querySelectorAll('.week-tab');
+  if(tabs[w]) tabs[w].innerHTML=loading
+    ?`Week ${w+1} <span class="loading-spinner" style="width:.6rem;height:.6rem;border-width:1.5px"></span>`
+    :`Week ${w+1}`;
+}
+
+// ─── CHECK TIME OFF CONFLICT ───
+function getTimeoffDates(staff) {
+  if (!staff.timeOff||!staff.timeOff.length) return [];
+  return staff.timeOff.map(to=>to.date.toLowerCase());
+}
+
+function hasTimeOffConflict(staffName, dateStr) {
+  const s = staffRoster.find(x=>x.name===staffName);
+  if (!s||!s.timeOff||!s.timeOff.length) return false;
+  const dl = dateStr.toLowerCase();
+  return s.timeOff.some(to=>{
+    const tl=to.date.toLowerCase();
+    return dl.includes(tl)||tl.includes(dl)||
+      dl.split(' ').some(w=>tl.includes(w)&&w.length>2);
+  });
+}
+
+// ─── RENDER SCHEDULE ───
+function renderSchedule(weekIdx) {
+  const week=scheduleData[currentLoc]?.[weekIdx];
+  const cfg=LOC_CONFIG[currentLoc];
+  if (!week) {
+    document.getElementById('scheduleOutput').innerHTML=`
+      <div class="empty-state">
+        <div style="font-size:1.6rem"><span class="loading-spinner" style="width:1.6rem;height:1.6rem;border-width:3px"></span></div>
+        <p>${Object.values(scheduleData).some(v=>v.some(w=>w)) ? `Building ${currentLoc} Week ${weekIdx+1}…` : 'Click Generate Schedule to begin.'}</p>
+      </div>`; return;
+  }
+
+  const isMinor=name=>staffRoster.find(x=>x.name===name)?.minor;
+  const usedStations=[...new Set(Object.values(cfg.shifts).flatMap(sh=>sh.stations))];
+  const shiftKeys=Object.keys(cfg.shifts);
+
+  const slotHtml=(name,type,dateStr)=>{
+    if (!name) return `<span style="color:#4a4038;font-style:italic;font-size:.7rem">—</span>`;
+    const conflict=hasTimeOffConflict(name,dateStr);
+    return `<div class="shift-slot ${type}${conflict?' timeoff-conflict':''}" title="${conflict?'⚠ Time-off conflict!':''}">
+      ${name}${isMinor(name)?'<span class="shift-minor-flag">minor</span>':''}${conflict?' ⚠':''}
+    </div>`;
+  };
+
+  let html=`<div class="schedule-wrap"><table class="schedule-table"><thead><tr>
+    <th class="day-col">Day</th>
+    ${usedStations.map(s=>`<th>${s}</th>`).join('')}
+  </tr></thead><tbody>`;
+
+  week.days.forEach(day=>{
+    const isWeekend=cfg.shifts.mid?.days?.includes(day.day);
+    const dateStr=day.date||day.day;
+
+    const allNamesThisDay=new Set();
+    shiftKeys.forEach(sk=>{ if(day[sk]) Object.values(day[sk]).forEach(n=>{ if(n) allNamesThisDay.add(n); }); });
+    const dayHasConflict=[...allNamesThisDay].some(n=>hasTimeOffConflict(n,dateStr));
+
+    shiftKeys.forEach((shiftKey,si)=>{
+      const shiftCfg=cfg.shifts[shiftKey];
+      if (shiftKey==='mid'&&!isWeekend) return;
+      const shiftData=day[shiftKey];
+      const rowClass=dayHasConflict?'timeoff-row':'';
+
+      html+=`<tr class="${rowClass}">
+        <td>
+          ${si===0?`<div class="day-label">${day.day}</div><div class="date-sub">${day.date||''}</div>`:''}
+          <div class="shift-label ${shiftKey}">${shiftKey.toUpperCase()} <span style="font-size:.56rem;opacity:.65">${shiftCfg.time}</span></div>
+          ${si===0&&dayHasConflict?`<div class="timeoff-marker">⚠ conflict</div>`:''}
+        </td>
+        ${usedStations.map(st=>{
+          if (!shiftCfg.stations.includes(st)) return `<td></td>`;
+          return `<td>${slotHtml(shiftData?.[st]||null,shiftKey,dateStr)}</td>`;
+        }).join('')}
+      </tr>`;
+    });
+    html+=`<tr class="day-divider"><td colspan="${usedStations.length+1}"></td></tr>`;
+  });
+
+  html+=`</tbody></table></div>`;
+  document.getElementById('scheduleOutput').innerHTML=html;
 }
 
 // ─── HOURS SUMMARY ───
